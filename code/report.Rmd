@@ -1,0 +1,166 @@
+---
+title: "Forward Return Prediction Data Report"
+author: "Yawen Hu"
+date: "`r format.Date(Sys.Date(), '%B %d, %Y')`"
+output: html_document
+---
+<style type="text/css">
+  body{
+  font-family: times, serif;
+  font-size: 12pt;
+  spacing: double;
+}
+</style>
+
+```{r setup, include=FALSE}
+# 79: -------------------------------------------------------------------------
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, echo = FALSE, message = FALSE}
+setwd("~/Desktop/urop")
+foo1 = load("./price_model.RData")
+foo2 = load("./prediction.RData")
+library(tidyverse)
+```
+
+## **Overview:**  
+ 
+    In this project, we want to predict the forward return of a financial asset base on the historical price series of the target asset and other two assets. The price data is given as minutely prices of the three assets over a year.  
+    The project mainly has two part. The first part generated some basic models based on backward returns, which can help us to choose the model fitting method we want to use in the second part. In the second part, we gather the information obtained from the first part to build a statistical model, which is used as the final prediction model. 
+
+### **Part 0. Data Preparation  **       
+##### *This data preparation step helps us to generate the data set we will use in the model fitting part. In this part, we mainly do the following things: *     
+  * Calculate the backward return of the three assets.      
+  * Calculate the 3-weeks rolling correlation of 3-min backward returns of each pair of the three assets.       
+         
+|        *The code for this part can be found in `data_prep.R`.*      
+<details>
+ <summary> `data_prep.R` </summary>
+```{r data_prep.R, comment = "", results = "asis"}
+writeLines(c('```R', readLines("./data_prep.R"), '```'))
+```
+</details>
+      
+### **Part I. Regression  **      
+##### *In the regression part, we fitted four models using different methods: *      
+  * Linear Regression      
+  * K-th Nearest Neighbor      
+  * Ridge       
+  * LASSO       
+      
+|        By comparing the out-of-sample correlation between the true value and predicted value, we choose the best method for prediction.       
+       
+|        *The code of computation can be found in `data_analysis.R`.*     
+<details>
+ <summary> `data_prep.R` </summary>
+```{r data_analysis.R, comment = "", results = "asis"}
+writeLines(c('```R', readLines("./data_analysis.R"), '```'))
+```
+</details>
+            
+#### **1. Models:**     
+      
+##### **(1). Model 1 - Linear Regression **    
+  * Outcome: $r_f(t, 10)$ of Asset 1.      
+  * Predictors: $r_b(t,3)$, $r_b(t,10)$, $r_b(t,30)$ of the three Assets.     
+  * Summary of Model 1:      
+```{r linear model, echo=FALSE}
+summary(lmod)
+```
+  * Correlation figure:      
+```{r, fig.cap = cap1}
+cap1 = sprintf("**Figure 1.** *Three-week backward rolling correlation between true forward return and predicted forward return*")
+print(lm_corr_plot)
+```
+          
+##### **(2). Model 2 - KNN **       
+  * Outcome: $r_f(t, 10)$ of Asset 1.     
+  * Predictors: $r_b(t,3)$, $r_b(t,10)$, $r_b(t,30)$ of the three Assets.     
+  * Graph for finding best K.     
+```{r, fig.cap = cap2 }
+cap2 = sprintf("**Figure 2.** *Training and Testing MSE for KNN*")
+plot(trainMSE_KNN ~ k_range, type = "b", lwd = 2, col = "blue",
+     main = "Training and Testing MSE for KNN", xlab = "K", ylab = "MSE")
+lines(testMSE_KNN ~ k_range, type = "b", lwd = 2, col = "red")
+```
+
+    - The best K value range we use is {5, 25, 125, 625}. And the best K value we found is 625.     
+    
+##### **(3). Model 3 - Ridge**    
+  * Predictors: $r_b(t,h)$ of the three Assets, where h $\in$ { 3, 10, 30, 60, 120, 180, 240, 360, 480, 600, 720, 960, 1200, 1440 }.     
+  * Best $\lambda$ selection: The best tuning parameter ($\lambda$) in Ridge selected by validation MSE is 0.004793031.    
+```{r best ridge lambdada, fig.cap= cap3}
+cap3 = sprintf("**Figure 3.** *Validation MSE versus ridge lambda*")
+print(ridge_lambda_plot)
+```
+     
+##### **(4). Model 4 - LASSO **      
+  * Predictors: $r_b(t,h)$ of the three Assets, where h $\in$ { 3, 10, 30, 60, 120, 180, 240, 360, 480, 600, 720, 960, 1200, 1440 }.     
+  * Best $\lambda$ selection: The best tuning parameter ($\lambda$) in lASSO selected by validation MSE is 4.469997e-05.    
+```{r best lasso lambdada, fig.cap= cap4}
+cap4 = sprintf("**Figure 4.** *Validation MSE versus LASSO lambda*")
+print(lasso_lambda_plot)
+```  
+     
+#### **2. Correlation Table:**       
+```{r table 1, echo = FALSE}
+cap3 = sprintf("**Table 1.** *In-sample and out-of-sample correlation of models*")
+cor_table = model_cor %>%
+  transmute(
+    Model = c("Linear Model", "KNN Model", "Ridge Model", "LASSO Model"),
+    `in-sample correlation` = round(in_sample_cor, 4),
+    `out-of-sample correlation` = round(out_sample_cor, 4)
+  ) %>% 
+  knitr::kable(format = "html", caption = cap3) %>%
+  kableExtra::kable_styling("striped")
+```
+
+```{r print table 1}
+cor_table
+```
+    
+     - Comparing the values in Table 1, it shows that the model generated by linear regression has the largest out-of-sample correlation among all three models. As a result, we will choose linear regression to generate our final model to do the forward return prediction. 
+        
+### **Part II. Final Prediction**     
+##### *In the final prediction part, it mainly contains three steps:*      
+  * Add more predictors.      
+  * Use LASSO to select the variables.      
+  * Use linear regression to fit the model based on the selected variables and do the prediction.      
+    
+|        *The code for this part can be found in `prediction.R`.*    
+<details>
+ <summary> `prediction.R` </summary>
+```{r prediction.R, comment = "", results = "asis"}
+writeLines(c('```R', readLines("./prediction.R"), '```'))
+```
+</details>
+       
+#### **1. Variable Selected by LASSO:**     
+* Asset 1: $r_b(t,1)$, $r_b(t,2)$, $r_b(t,3)$, $r_b(t,5)$, $r_b(t,10)$, $r_b(t,30)$.    
+* Asset 2: $r_b(t,1)$, $r_b(t,2)$, $r_b(t,3)$, $r_b(t,5)$, $r_b(t,30)$.    
+* Asset 3: $r_b(t,1)$, $r_b(t,2)$.    
+     
+#### **2. Correlation Table:**    
+```{r updated correlation table}
+cap4 = sprintf("**Table 2.** *In-sample and out-of-sample correlation of models (with the Final Model)*")
+r = c(cor_in_sample_final, cor_out_sample_final)
+model_cor = rbind(model_cor, r)
+cor_table2 = model_cor %>%
+  transmute(
+    Model = c("Linear Model", "KNN Model", "Ridge Model", "LASSO Model", "Final Model"),
+    `in-sample correlation` = round(in_sample_cor, 4),
+    `out-of-sample correlation` = round(out_sample_cor, 4)
+  ) %>% 
+  knitr::kable(format = "html", caption = cap4) %>%
+  kableExtra::kable_styling("striped")
+
+```
+
+```{r print table 2}
+cor_table2
+```
+       
+    - From the updated table, we find that the final model has the highest out-of-sample correlation(0.04283438), which indicates the best performance on prediction of forward return. 
+
+\pagebreak
